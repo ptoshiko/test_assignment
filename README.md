@@ -20,7 +20,7 @@ python3 -m venv badge_env
 source badge_env/bin/activate
 pip install -r requirements.txt
 mkdir processed
-python3 main.py <path_to_image>
+python3 main.py path/to/your/image.png
 ```
 ## Testing:  
 There are unit tests in the repository, which can be run using the script, provided below
