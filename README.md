@@ -29,5 +29,5 @@ python3 -m venv badge_env
 source badge_env/bin/activate
 pip install -r requirements.txt
 mkdir processed
-python3 badge_test.py
+python3 verify_convert_test.py
 ```
