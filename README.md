@@ -12,7 +12,7 @@ Additionally, you can create a parallel function that converts the given image (
 
 The task is written in Python, utilizing OpenCV and Pillow libraries for image processing. K-means clustering method was used to select main colors from pictures. 
 
-## To test functions: 
+## To test functions:  
 
 ```bash
 python3 -m venv badge_env
