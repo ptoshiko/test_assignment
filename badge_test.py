@@ -1,5 +1,5 @@
 import unittest
-from main import verify_badge, convert_image
+from verify_convert import verify_badge, convert_image
 from parameterized import parameterized
 import os
 
@@ -20,7 +20,7 @@ class TestImageFunc(unittest.TestCase):
     
     def test_verify_badge(self, name, input_path, expected_output):
         with self.subTest(name=name):
-            result = verify_badge(input_path)
+            result = verify_badge(input_path, None, None)
             self.assertEqual(result, expected_output)
 
     @parameterized.expand([
@@ -36,9 +36,9 @@ class TestImageFunc(unittest.TestCase):
     def test_convert_image_result(self, name, input_path, expected_output):
         with self.subTest(name=name):
             filename, _ = os.path.splitext(os.path.basename(input_path))
-            convert_image(input_path)
+            convert_image(input_path, None, None)
             pr_img_path = os.path.join("./processed", filename + ".png")
-            result = verify_badge(pr_img_path)
+            result = verify_badge(pr_img_path, None, None)
             self.assertEqual(result, expected_output)
 
         

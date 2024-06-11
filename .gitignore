@@ -2,3 +2,4 @@ __pycache__/
 badge_env/
 **/.DS_Store
 mask.png
+.env
