@@ -1,3 +1,5 @@
 __pycache__/
 badge_env/
 **/.DS_Store
+processed/
+mask.png
