@@ -1,78 +1,45 @@
 SIZE = (512, 512)
-
-N_CLUSTERS = 7
+HEIGHT = 512
+WIDTH = 512
 
 SATURATION_MIN=60 # max 100
 BRIGHTNESS_MIN=60 # max 100
 
 from PIL import Image
-import numpy as np
-from sklearn.cluster import KMeans
-import cv2
 import os
-
-def create_mask():
-    mask = Image.new('L', (512, 512), 0)
-    np_mask = np.array(mask)
-    center = (SIZE[0] // 2, SIZE[1] // 2)
-    radius = SIZE[0] // 2
-    cv2.circle(np_mask, center, radius, 255, thickness=-1)
-    
-    pil_mask = Image.fromarray(np_mask)
-    pil_mask.save("./mask.png")
-    return np_mask
+import colorsys
 
 
-def is_happy_color(color, brightness_min, saturation_min):
+def is_happy_color(s, v, brightness_min, saturation_min):
 
-    color_hsv = cv2.cvtColor(np.uint8([[color]]), cv2.COLOR_RGB2HSV)[0][0]
-    _, s, v = color_hsv
-    
-    is_bright = v > brightness_min
-    is_saturated = s > saturation_min
-    
+    s = int(s * 100)   # Convert to percentage 
+    v = int(v * 100)  
+
+    is_bright = v >= brightness_min
+    is_saturated = s >= saturation_min
+
     return is_bright and is_saturated
 
 
-def check_colors(np_img, brightness_min, saturation_min):
-    
-    non_transparent = np_img[:, :, 3] != 0
-    colors = np_img[non_transparent, :3].reshape(-1, 3)
-    
-    unique_colors = np.unique(colors, axis=0)
-    
-    n_clusters = min(N_CLUSTERS, len(unique_colors))
-    
-    if len(unique_colors) < N_CLUSTERS:
-        happy_colors = sum(1 for color in unique_colors if is_happy_color(color, brightness_min, saturation_min)) / len(unique_colors)
+def adjust_color(h, s, v, brightness_min, saturation_min):
 
-    else:
-        kmeans = KMeans(n_clusters=n_clusters).fit(colors)
-        happy_colors = sum(1 for center in kmeans.cluster_centers_ if is_happy_color(center, brightness_min, saturation_min)) / N_CLUSTERS
-    if happy_colors < 0.6:
-        return False
-    return True
+    brightness_min /= 100.0 # Convert from percentage
+    saturation_min /= 100.0
+
+    s = max(s, saturation_min)
+    v = max(v, brightness_min)
+    
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    r, g, b = int(r * 255), int(g * 255), int(b * 255) 
+    
+    return (r, g, b)
 
 
-def adjust_colors(np_img, brightness_min, saturation_min):
-    
-	alpha_channel = np_img[:, :, 3]
-	non_transparent_mask = np_img[:, :, 3] != 0
-	hsv_img = cv2.cvtColor(np_img[:, :, :3], cv2.COLOR_RGB2HSV)
-
-	h, s, v = cv2.split(hsv_img)
-    
-	s[non_transparent_mask] = np.maximum(s[non_transparent_mask], saturation_min )
-	v[non_transparent_mask] = np.maximum(v[non_transparent_mask], brightness_min)
-    
-	adjusted_hsv_img = cv2.merge([h, s, v])
-    
-	adjusted_rgb_img = cv2.cvtColor(adjusted_hsv_img, cv2.COLOR_HSV2RGB)
-    
-	adjusted_rgba_img = np.dstack((adjusted_rgb_img, alpha_channel))
-    
-	return adjusted_rgba_img
-
+def  is_in_circle(x, y):
+    circle_center_x, circle_center_y = (WIDTH/2), (HEIGHT/2)
+    radius = (HEIGHT/2)
+    sq_distance = ((x - circle_center_x) ** 2 + (y - circle_center_y) ** 2) # с**2 = a**2 + b**2
+    return sq_distance <= radius ** 2
 
 
 def verify_badge(image_path, brightness_min, saturation_min):
@@ -87,23 +54,30 @@ def verify_badge(image_path, brightness_min, saturation_min):
     if img.size != SIZE:
         return False, "Invalid size"
 
-    np_img = np.array(img)
-    non_transparent = np_img[:, :, 3] != 0
-    
-    np_mask = create_mask()
-    
-    # boolean array where True indicates pixels outside the circle
-    outside_circle = non_transparent & (np_mask == 0)
-    if (np.any(outside_circle)):
-        return False, "Non-transparent pixels found"
-    
+    pixels_len = 0
+    bad_colors_len = 0
+
     if brightness_min is None:
         brightness_min = BRIGHTNESS_MIN
     if saturation_min is None:
         saturation_min = SATURATION_MIN
 
+    for x in range(WIDTH):
+        for y in range(HEIGHT):
+            pixel = img.getpixel((x, y))
+            if len(pixel) == 4 and pixel[3] != 0:
+                if not is_in_circle(x, y):
+                    return False, "Non-transparent pixels found"
+                pixels_len += 1
 
-    if not (check_colors(np_img, brightness_min, saturation_min)):
+                r, g, b = pixel[:3]  
+                _, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)  # convert to HSV 
+
+                if not is_happy_color(s, v, brightness_min, saturation_min):
+                    bad_colors_len +=1
+
+    happy_colors = (1 - (bad_colors_len/pixels_len))
+    if happy_colors < 0.9:
         return False, "Colors do not convey a happy feeling"
     
     return True, "Badge is valid"
@@ -112,7 +86,7 @@ def verify_badge(image_path, brightness_min, saturation_min):
 
 def convert_image(image_path, brightness_min, saturation_min):
     try:
-        image = Image.open(image_path)
+        img = Image.open(image_path)
     except FileNotFoundError:
         return False, f"File not found: {image_path}"
     except Exception as e:
@@ -125,32 +99,32 @@ def convert_image(image_path, brightness_min, saturation_min):
 
     if extension != '.png':
         try:
-            image.save(save_path)
+            img.save(save_path)
         except OSError:
             return False, f"Cannot convert. Unsupported file type."
         
-    image = image.resize((512, 512)).convert("RGBA")
+    img = img.resize(SIZE).convert("RGBA")
 
-    np_mask = create_mask()
-    np_img = np.array(image)
-    
-    np_img[np_mask == 0] = [0, 0, 0, 0]  # set outside pixels to transparent
-
-    
     if brightness_min is None:
-       brightness_min = BRIGHTNESS_MIN
+        brightness_min = BRIGHTNESS_MIN
     if saturation_min is None:
         saturation_min = SATURATION_MIN
 
+    for x in range(WIDTH):
+        for y in range(HEIGHT):
+            pixel = img.getpixel((x, y))
+            if len(pixel) == 4 and pixel[3] != 0:
+                if not is_in_circle(x, y):
+                    pixel = (pixel[0], pixel[1], pixel[2], 0)
+                else:
 
-    if not (check_colors(np_img, brightness_min, saturation_min)):
-        adjusted_np_img = adjust_colors(np_img, brightness_min, saturation_min)
-        img = Image.fromarray(adjusted_np_img)
-    else:
-        img = Image.fromarray(np_img)
+                    r, g, b = pixel[:3]
+                    h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0) # convert to HSV 
+
+                    if not is_happy_color(s, v, brightness_min, saturation_min):
+                        r, g, b = adjust_color(h, s, v, brightness_min, saturation_min)
+                        pixel = (r, g, b, pixel[3]) 
+                img.putpixel((x, y), pixel)
+
     img.save(save_path)
-        
     return True, "Image converted, you can find it here: " + save_path
-
-
-
